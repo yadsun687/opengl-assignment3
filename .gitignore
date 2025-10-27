@@ -1,0 +1,6 @@
+/build
+/CMakeFiles
+/resources/references
+/CMakeCache.txt
+/clang-format
+/.cache/*

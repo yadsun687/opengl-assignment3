@@ -1,0 +1,3 @@
+{
+  "dependencies": ["glm", "glfw3", "stb", "assimp", "glad" , "soil2"]
+}
