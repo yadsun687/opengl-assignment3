@@ -2,5 +2,5 @@
 /CMakeFiles
 /resources/references
 /CMakeCache.txt
-/clang-format
-/.cache/*
+.clang-format
+.cache
