@@ -24,7 +24,7 @@ uniform sampler2D texture_height1;
 
 uniform bool hasNormalMap;
 
-const bool enablePixelation = true;
+const bool enablePixelation = false;
 
 vec3 CalcPlayerPointLight(vec3 normal, vec3 diffuseColor)
 {
@@ -73,7 +73,7 @@ void main()
         normal = vec3(0.0, 0.0, 1.0);
     }
 
-    vec3 lightColor = vec3(0.015, 0.101, 0.25);
+    vec3 lightColor = vec3(1.0, 1.0, 1.0);
     // get diffuse color
     // ambient
     vec3 ambient = 0.2 * lightColor;
@@ -89,7 +89,8 @@ void main()
     vec3 specular = 0.2 * spec * lightColor;
 
     vec3 color = texture(texture_diffuse1, texCoords).rgb;
-    vec3 totalLight = CalcPlayerPointLight(normal, color) + ((ambient + diffuse + specular) * color);
+    // vec3 totalLight = CalcPlayerPointLight(normal, color) + ((ambient + diffuse + specular) * color);
+    vec3 totalLight = ((ambient + diffuse + specular) * color);
 
     // FragColor = vec4(texCoords.xy , 0.0, 1.0); // uv color
     // FragColor = vec4(lightDir * 0.5 + 0.5, 1.0); // Visualize light direction

@@ -14,7 +14,7 @@ find_package(glad CONFIG REQUIRED)
 find_package(glfw3 CONFIG REQUIRED)
 # find_package(OpenMP REQUIRED)
 # find_package(Freetype CONFIG REQUIRED)
-# find_package(imgui CONFIG REQUIRED)
+find_package(imgui CONFIG REQUIRED)
 find_package(stb REQUIRED)
 find_package(assimp CONFIG REQUIRED)
 find_package(soil2 CONFIG REQUIRED)
@@ -75,8 +75,8 @@ target_link_libraries(OPENGL_APP PUBLIC
     glad::glad
     assimp::assimp
     soil2
+    imgui::imgui
 #     Freetype::Freetype
-#     imgui::imgui
 )
 
 target_compile_options(OPENGL_APP PUBLIC

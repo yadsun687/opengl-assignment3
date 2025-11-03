@@ -8,6 +8,9 @@
 #include <glm/ext/quaternion_common.hpp>
 #include <stb_image.h>
 #include <cmath>
+#include <imgui.h>
+#include <imgui_impl_glfw.h>
+#include <imgui_impl_opengl3.h>
 
 #include <Animation/animator.h>
 #include <Animation/animation.h>
@@ -31,7 +34,6 @@ void mouse_click_callback(GLFWwindow *window, int button, int action, int Mode);
 void key_click_callback(GLFWwindow *window, int key, int scancode, int action,
                         int mods);
 void processInput(GLFWwindow *window, Player *player, PlayerLockCamera *camera);
-unsigned int loadTexture(const char *path);
 void pickingPhase(PickingTexture pickingTexture, Shader shader,
                   PlayerLockCamera *camera, Model *terrain);
 int glfwInit(GLFWwindow *&window);
@@ -59,6 +61,11 @@ int mouseX, mouseY;
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
 
+// player action
+bool isPunch = false;
+bool isRoll = false;
+bool isRunning = false;
+
 int main() {
 
   GLFWwindow *window;
@@ -82,40 +89,23 @@ int main() {
 
   // lighting info
   // -------------
-  glm::vec3 lightPos(0.5f, 10.0f, 0.3f);
+  glm::vec3 lightPos(0.0f, 4.0f, 0.0f);
   Model cube(FileSystem::getPath("resources/models/cube.obj").c_str());
 
   GameManager *gameManager = GameManager::getInstance();
-  Animation playerAnimIdle(
-      FileSystem::getPath("resources/models/player/animationonly_Witch.fbx")
-          .c_str(),
-      &gameManager->getPlayer().m_model, 4);
-  Animation playerAnimRun(
-      FileSystem::getPath("resources/models/player/animationonly_Witch.fbx")
-          .c_str(),
-      &gameManager->getPlayer().m_model, 16);
-  Animator animator(&playerAnimIdle);
-
+  // float blendFactor = 0.5f;
+  // gameManager->getPlayer().m_animator.PlayAnimation(
+  //     &gameManager->getPlayer().m_animations[0],
+  //     &gameManager->getPlayer().m_animations[1], 0.0f, 0.0f, blendFactor);
   PlayerLockCamera playerLockCamera =
       PlayerLockCamera(gameManager->getPlayer());
 
-  // "Low Poly City" (https://skfb.ly/o8q8z) by Alessandro.Diamanti is licensed
-  // under Creative Commons Attribution
-  // (http://creativecommons.org/licenses/by/4.0/).
   Model terrain(
-      FileSystem::getPath("resources/models/City/low_poly_city.fbx").c_str());
+      FileSystem::getPath("resources/models/misc/terrain_prototype.fbx")
+          .c_str());
 
   Model projectile(
       FileSystem::getPath("resources/models/projectile/fireball.gltf").c_str());
-
-  // "Ghost" (https://skfb.ly/6r9tx) by BConnolly is licensed under Creative
-  // Commons Attribution-NonCommercial
-  // (http://creativecommons.org/licenses/by-nc/4.0/).
-  Model enemy(
-      FileSystem::getPath("resources/models/enemy/final_ghost.fbx").c_str());
-
-  PickingTexture pickingTexture;
-  pickingTexture.init(SCR_WIDTH, SCR_HEIGHT);
 
   // [skybox]
   // ----------------
@@ -162,6 +152,20 @@ int main() {
   shader.use();
   shader.setVec3("playerLightPos", gameManager->getPlayer().m_position);
 
+  // GUI (imgui)
+  // ---------
+  ImGuiIO *io;
+  IMGUI_CHECKVERSION();
+  ImGui::CreateContext();
+  io = &ImGui::GetIO();
+  io->ConfigFlags |=
+      ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
+  // Setup Dear ImGui style
+  ImGui::StyleColorsDark();
+  // Setup Platform/Renderer backends
+  ImGui_ImplGlfw_InitForOpenGL(window, true);
+  ImGui_ImplOpenGL3_Init("#version 330");
+
   // render loop
   // -----------
   while (!glfwWindowShouldClose(window)) {
@@ -171,7 +175,7 @@ int main() {
     deltaTime = currentFrame - lastFrame;
     lastFrame = currentFrame;
 
-    gameManager->update(deltaTime);
+    // gameManager->update(deltaTime);
     // input
     // -----
     if (glfwGetInputMode(window, GLFW_CURSOR) == GLFW_CURSOR_DISABLED) {
@@ -188,67 +192,9 @@ int main() {
                          (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
     glm::mat4 view = playerLockCamera.GetViewMatrix();
 
-    // Player shoot
-    if (isPressedLeft) {
-      pickingPhase(pickingTexture, pickingShader, &playerLockCamera, &terrain);
-      glm::vec3 p = pickingTexture.getClickedPosition(
-          mouseX, SCR_HEIGHT - mouseY - 1, view, projection);
-      glm::vec3 playerPos = gameManager->getPlayer().m_position;
-      glm::vec3 direction =
-          glm::normalize(glm::vec3(p.x, 0.0f, p.z) -
-                         glm::vec3(playerPos.x, 0.0f, playerPos.z));
-      gameManager->generateProjectile(playerPos, direction);
-      isPressedLeft = false;
-    }
-    // Player walk to cursor clicked position
-    else if (isPressedRight) {
-      pickingPhase(pickingTexture, pickingShader, &playerLockCamera, &terrain);
-      glm::vec3 p = pickingTexture.getClickedPosition(
-          mouseX, SCR_HEIGHT - mouseY - 1, view, projection);
-      if (p.y < 0.2) {
-        // only click on ground
-        std::cout << "WALK TOWARD TO: ";
-        Debug::logGLMVector(p);
-        std::cout << "\n";
-        gameManager->getPlayer().m_targetPosition = glm::vec3(p.x, 0.0f, p.z);
-        glm::vec2 horizontalDirection =
-            glm::vec2(gameManager->getPlayer().m_targetPosition.x -
-                          gameManager->getPlayer().m_position.x,
-                      gameManager->getPlayer().m_targetPosition.z -
-                          gameManager->getPlayer().m_position.z);
-        float angle = std::atan2(horizontalDirection.x, horizontalDirection.y);
-        gameManager->getPlayer().m_targetModelAngle = angle;
+    shader.use();
+    shader.setVec3("playerLightPos", gameManager->getPlayer().m_position);
 
-        // switch animation to run
-        if (animator.getCurrentAnimation().GetName() !=
-            playerAnimRun.GetName()) {
-          animator.PlayAnimation(&playerAnimRun);
-        }
-        isPressedRight = false;
-      }
-    }
-
-    // continuously move toward target position
-    float moveDistance =
-        glm::distance(gameManager->getPlayer().m_position,
-                      gameManager->getPlayer().m_targetPosition);
-    if (moveDistance > 1e-6) {
-      glm::vec3 movedPosition = Calculation::lerp(
-          gameManager->getPlayer().m_position,
-          gameManager->getPlayer().m_targetPosition,
-          (gameManager->getPlayer().m_movement_speed * deltaTime) /
-              moveDistance);
-      gameManager->getPlayer().moveTo(
-          glm::vec3(movedPosition.x, gameManager->getPlayer().m_position.y,
-                    movedPosition.z));
-      shader.use();
-      shader.setVec3("playerLightPos", gameManager->getPlayer().m_position);
-    } else {
-      if (animator.getCurrentAnimation().GetName() !=
-          playerAnimIdle.GetName()) {
-        animator.PlayAnimation(&playerAnimIdle);
-      }
-    }
     // continuously move toward facing direction
     if (gameManager->getPlayer().m_modelAngle !=
         gameManager->getPlayer().m_targetModelAngle) {
@@ -268,6 +214,231 @@ int main() {
       playerLockCamera.updateCameraPosition();
     }
 
+    if (true) {
+
+      switch (gameManager->getPlayer().m_actionState) {
+      case IDLE:
+        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS ||
+            glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS ||
+            glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS ||
+            glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
+          gameManager->getPlayer().m_blendAmount = 0.0f;
+          gameManager->getPlayer().m_animator.PlayAnimation(
+              &gameManager->getPlayer().m_animations[0],
+              &gameManager->getPlayer().m_animations[3],
+              gameManager->getPlayer().m_animator.getCurrentTime1(), 0.0f,
+              gameManager->getPlayer().m_blendAmount);
+          gameManager->getPlayer().setActionState(IDLE_RUNNING);
+        } else if (isPunch) {
+          gameManager->getPlayer().m_blendAmount = 0.0f;
+          gameManager->getPlayer().m_animator.PlayAnimation(
+              &gameManager->getPlayer().m_animations[0],
+              &gameManager->getPlayer().m_animations[1],
+              gameManager->getPlayer().m_animator.getCurrentTime1(), 0.0f,
+              gameManager->getPlayer().m_blendAmount);
+          gameManager->getPlayer().setActionState(IDLE_PUNCH);
+        }
+        printf("idle \n");
+        break;
+      case IDLE_RUNNING:
+        gameManager->getPlayer().m_blendAmount += ANIM_BLEND_RATE;
+        gameManager->getPlayer().m_blendAmount =
+            fmod(gameManager->getPlayer().m_blendAmount, 1.0f);
+        gameManager->getPlayer().m_animator.PlayAnimation(
+            &gameManager->getPlayer().m_animations[0],
+            &gameManager->getPlayer().m_animations[3],
+            gameManager->getPlayer().m_animator.getCurrentTime1(),
+            gameManager->getPlayer().m_animator.getCurrentTime2(),
+            gameManager->getPlayer().m_blendAmount);
+        if (gameManager->getPlayer().m_blendAmount > 0.9f) {
+          gameManager->getPlayer().m_blendAmount = 0.0f;
+          float startTime =
+              gameManager->getPlayer().m_animator.getCurrentTime2();
+          gameManager->getPlayer().m_animator.PlayAnimation(
+              &gameManager->getPlayer().m_animations[3], NULL, startTime, 0.0f,
+              gameManager->getPlayer().m_blendAmount);
+          gameManager->getPlayer().setActionState(RUNNING);
+        }
+        printf("idle_walk \n");
+        break;
+      case RUNNING:
+        gameManager->getPlayer().m_animator.PlayAnimation(
+            &gameManager->getPlayer().m_animations[3], NULL,
+            gameManager->getPlayer().m_animator.getCurrentTime1(),
+            gameManager->getPlayer().m_animator.getCurrentTime2(),
+            gameManager->getPlayer().m_blendAmount);
+        if (isRoll) {
+          float currentTime =
+              gameManager->getPlayer().m_animator.getCurrentTime1();
+          gameManager->getPlayer().m_blendAmount = 0.0f;
+          gameManager->getPlayer().m_animator.PlayAnimation(
+              &gameManager->getPlayer().m_animations[3],
+              &gameManager->getPlayer().m_animations[2], currentTime, 0.0f,
+              gameManager->getPlayer().m_blendAmount);
+          gameManager->getPlayer().setActionState(RUN_ROLLING);
+          break;
+        }
+        if (glfwGetKey(window, GLFW_KEY_W) != GLFW_PRESS &&
+            glfwGetKey(window, GLFW_KEY_A) != GLFW_PRESS &&
+            glfwGetKey(window, GLFW_KEY_S) != GLFW_PRESS &&
+            glfwGetKey(window, GLFW_KEY_D) != GLFW_PRESS) {
+          gameManager->getPlayer().setActionState(RUNNING_IDLE);
+          ;
+        }
+        printf("running\n");
+        break;
+      case RUNNING_IDLE:
+        gameManager->getPlayer().m_blendAmount += 0.01;
+        gameManager->getPlayer().m_blendAmount =
+            fmod(gameManager->getPlayer().m_blendAmount, 1.0f);
+        gameManager->getPlayer().m_animator.PlayAnimation(
+            &gameManager->getPlayer().m_animations[3],
+            &gameManager->getPlayer().m_animations[0],
+            gameManager->getPlayer().m_animator.getCurrentTime1(),
+            gameManager->getPlayer().m_animator.getCurrentTime2(),
+            gameManager->getPlayer().m_blendAmount);
+        if (gameManager->getPlayer().m_blendAmount > 0.9f) {
+          gameManager->getPlayer().m_blendAmount = 0.0f;
+          float startTime =
+              gameManager->getPlayer().m_animator.getCurrentTime2();
+          gameManager->getPlayer().m_animator.PlayAnimation(
+              &gameManager->getPlayer().m_animations[0], NULL, startTime, 0.0f,
+              gameManager->getPlayer().m_blendAmount);
+          gameManager->getPlayer().setActionState(IDLE);
+          gameManager->getPlayer().m_blendAmount = 0.0f;
+        }
+        printf("walk_idle \n");
+        break;
+      case RUN_ROLLING: {
+        gameManager->getPlayer().m_blendAmount +=
+            0.005f; // adjust speed as needed
+        gameManager->getPlayer().m_blendAmount =
+            fmod(gameManager->getPlayer().m_blendAmount, 1.0f);
+
+        gameManager->getPlayer().m_animator.PlayAnimation(
+            &gameManager->getPlayer().m_animations[3],
+            &gameManager->getPlayer().m_animations[2],
+            gameManager->getPlayer().m_animator.getCurrentTime1(),
+            gameManager->getPlayer().m_animator.getCurrentTime2(),
+            gameManager->getPlayer().m_blendAmount);
+
+        // transition into full roll quickly
+        if (gameManager->getPlayer().m_blendAmount > 0.1f) {
+          float startTime =
+              gameManager->getPlayer().m_animator.getCurrentTime2();
+          gameManager->getPlayer().m_animator.PlayAnimation(
+              &gameManager->getPlayer().m_animations[2], NULL, startTime, 0.0f,
+              0.0f);
+          gameManager->getPlayer().setActionState(ROLLING);
+        }
+        printf("running_roll\n");
+        break;
+      }
+      case ROLLING:
+        // transition to running after roll
+        if (gameManager->getPlayer().m_animator.getCurrentTime1() >
+            0.9f * gameManager->getPlayer()
+                       .m_animator.getCurrentAnimation()
+                       .GetDuration()) {
+          float currentTime =
+              gameManager->getPlayer().m_animator.getCurrentTime1();
+          gameManager->getPlayer().m_blendAmount = 0.0f;
+          gameManager->getPlayer().m_animator.PlayAnimation(
+              &gameManager->getPlayer().m_animations[2],
+              &gameManager->getPlayer().m_animations[3], currentTime, 0.0f,
+              gameManager->getPlayer().m_blendAmount);
+          gameManager->getPlayer().setActionState(ROLLING_RUN);
+        }
+        break;
+      case ROLLING_RUN:
+        gameManager->getPlayer().m_blendAmount += 0.005;
+        gameManager->getPlayer().m_blendAmount =
+            fmod(gameManager->getPlayer().m_blendAmount, 1.0f);
+        gameManager->getPlayer().m_animator.PlayAnimation(
+            &gameManager->getPlayer().m_animations[2],
+            &gameManager->getPlayer().m_animations[3],
+            gameManager->getPlayer().m_animator.getCurrentTime1(),
+            gameManager->getPlayer().m_animator.getCurrentTime2(),
+            gameManager->getPlayer().m_blendAmount);
+        if (gameManager->getPlayer().m_blendAmount > 0.9f) {
+          gameManager->getPlayer().m_blendAmount = 0.0f;
+          float startTime =
+              gameManager->getPlayer().m_animator.getCurrentTime2();
+          gameManager->getPlayer().m_animator.PlayAnimation(
+              &gameManager->getPlayer().m_animations[3], NULL, startTime, 0.0f,
+              gameManager->getPlayer().m_blendAmount);
+          gameManager->getPlayer().m_blendAmount = 0.0f;
+          gameManager->getPlayer().setActionState(RUNNING);
+          isRoll = false;
+        }
+        printf("rolling_run\n");
+        break;
+
+      case IDLE_PUNCH:
+        //+blendAmount until it's 100% punch
+        gameManager->getPlayer().m_blendAmount += 0.005f;
+        gameManager->getPlayer().m_blendAmount =
+            fmod(gameManager->getPlayer().m_blendAmount, 1.0f);
+        gameManager->getPlayer().m_animator.PlayAnimation(
+            &gameManager->getPlayer().m_animations[0],
+            &gameManager->getPlayer().m_animations[1],
+            gameManager->getPlayer().m_animator.getCurrentTime1(),
+            gameManager->getPlayer().m_animator.getCurrentTime2(),
+            gameManager->getPlayer().m_blendAmount);
+        if (gameManager->getPlayer().m_blendAmount > 0.9f) {
+          gameManager->getPlayer().m_blendAmount = 0.0f;
+          gameManager->getPlayer().m_animator.PlayAnimation(
+              &gameManager->getPlayer().m_animations[1], NULL,
+              gameManager->getPlayer().m_animator.getCurrentTime2(), 0.0f,
+              gameManager->getPlayer().m_blendAmount);
+          gameManager->getPlayer().setActionState(PUNCH);
+        }
+        printf("idle_punch\n");
+        break;
+      case PUNCH:
+        if (gameManager->getPlayer().m_animator.getCurrentTime1() >=
+            0.9f * gameManager->getPlayer()
+                       .m_animator.getCurrentAnimation()
+                       .GetDuration()) {
+          gameManager->getPlayer().setActionState(PUNCH_IDLE);
+        }
+        printf("punch\n");
+
+        break;
+      case PUNCH_IDLE:
+        gameManager->getPlayer().m_blendAmount += 0.005;
+        gameManager->getPlayer().m_blendAmount =
+            fmod(gameManager->getPlayer().m_blendAmount, 1.0f);
+        gameManager->getPlayer().m_animator.PlayAnimation(
+            &gameManager->getPlayer().m_animations[1],
+            &gameManager->getPlayer().m_animations[0],
+            gameManager->getPlayer().m_animator.getCurrentTime1(),
+            gameManager->getPlayer().m_animator.getCurrentTime2(),
+            gameManager->getPlayer().m_blendAmount);
+        if (gameManager->getPlayer().m_blendAmount > 0.9f) {
+          gameManager->getPlayer().m_blendAmount = 0.0f;
+          float startTime =
+              gameManager->getPlayer().m_animator.getCurrentTime2();
+          gameManager->getPlayer().m_animator.PlayAnimation(
+              &gameManager->getPlayer().m_animations[0], NULL, startTime, 0.0f,
+              gameManager->getPlayer().m_blendAmount);
+          gameManager->getPlayer().m_blendAmount = 0.0f;
+
+          gameManager->getPlayer().setActionState(IDLE);
+          isPunch = false;
+        }
+        printf("punch_idle\n");
+
+        break;
+      }
+    }
+    // gameManager->getPlayer().m_animator.PlayAnimation(
+    //     &gameManager->getPlayer().m_animations[0],
+    //     &gameManager->getPlayer().m_animations[1],
+    //     gameManager->getPlayer().m_animator.getCurrentTime1(),
+    //     gameManager->getPlayer().m_animator.getCurrentTime2(), blendFactor);
+    gameManager->getPlayer().m_animator.UpdateAnimation(deltaTime);
+
     // render
     // ------
     glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
@@ -285,9 +456,8 @@ int main() {
     shader.setMat4("model", model);
     terrain.Draw(shader);
 
-    // render player model
-    animator.UpdateAnimation(deltaTime);
-    auto &transforms = animator.GetFinalBoneMatrices();
+    auto &transforms =
+        gameManager->getPlayer().m_animator.GetFinalBoneMatrices();
     for (int i = 0; i < transforms.size(); ++i)
       shader.setMat4("finalBonesMatrices[" + std::to_string(i) + "]",
                      transforms[i]);
@@ -313,20 +483,6 @@ int main() {
                           glm::vec3(0.0f, 1.0f, 0.0f));
       shader.setMat4("model", model);
       projectile.Draw(shader);
-    }
-
-    // draw enemies
-    auto &enemies = gameManager->getEnemies();
-    for (auto &obj : enemies) {
-      if (obj == nullptr)
-        continue;
-      model = glm::mat4(1.0f);
-      model = glm::translate(model, obj->position);
-      model = glm::scale(model, glm::vec3(0.01f));
-      model = glm::rotate(model, obj->rotation, glm::vec3(0.0f, 1.0f, 0.0f));
-
-      shader.setMat4("model", model);
-      enemy.Draw(shader);
     }
 
     // render light source (simple cube)
@@ -355,8 +511,53 @@ int main() {
     glBindVertexArray(0);
     glDepthFunc(GL_LESS); // set depth function back to default
 
-    // glfw: swap buffers and poll IO events (keys pressed/released, mouse
-    // moved etc.)
+    // Start the Dear ImGui frame
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+    //===========================================
+    ImGui::Begin("Parameters Panel");
+
+    ImGui::Text("Light Position");
+    ImGui::SliderFloat("Light X", &lightPos.x, -10.0f, 10.0f);
+    ImGui::SliderFloat("Light Y", &lightPos.y, -10.0f, 10.0f);
+    ImGui::SliderFloat("Light Z", &lightPos.z, -10.0f, 10.0f);
+    // ImGui::SliderFloat("Density", &(solver->DENSITY_0), 1.0f, 1000.0f);
+    // ImGui::SliderFloat("Viscosity (Mu)", &(solver->MU), 0.0f, 10.0f);
+    // ImGui::Checkbox("Using predicted position",
+    // &(solver->USE_PREDICTED));
+
+    // ImGui::Text("Environment");
+    // ImGui::SliderFloat("Gravity", &(solver->GRAVITY), 0.0f, 100.0f);
+    // ImGui::SliderFloat("Bounding box dampening", &(solver->RESTITUTION),
+    // 0.0f,
+    //                    1.0f);
+
+    // ImGui::Text("Spawning");
+    // ImGui::SliderInt("No. of Particles", &(solver->N_PARTICLES), 1,
+    // 100000); ImGui::SliderFloat("Spawning gap", &(solver->SPAWN_GAP),
+    // 0.0f, 10.0f);
+
+    // ImGui::SliderFloat3("Spawning position",
+    // glm::value_ptr(solver->SPAWN_POS),
+    //                     *glm::value_ptr(glm::vec3(-50.0f, -50.0f,
+    //                     -50.0f)),
+    //                     *glm::value_ptr(glm::vec3(50.0f, 50.0f, 50.0f)));
+
+    // ImGui::SliderFloat3("Box size min", glm::value_ptr(solver->BOX_MIN),
+    //                     *glm::value_ptr(glm::vec3(-50.0f, -50.0f,
+    //                     -50.0f)), *glm::value_ptr(glm::vec3(0.0f, 0.0f,
+    //                     0.0f)));
+    // ImGui::SliderFloat3("Box size max", glm::value_ptr(solver->BOX_MAX),
+    //                     *glm::value_ptr(glm::vec3(0.0f, 0.0f, 0.0f)),
+    //                     *glm::value_ptr(glm::vec3(50.0f, 50.0f, 50.0f)));
+
+    ImGui::End();
+    //===========================================
+
+    ImGui::Render();
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
     // -------------------------------------------------------------------------------
     glfwSwapBuffers(window);
     glfwPollEvents();
@@ -373,16 +574,35 @@ void processInput(GLFWwindow *window, Player *player,
                   PlayerLockCamera *camera) {
   if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
     glfwSetWindowShouldClose(window, true);
+  glm::vec3 dir =
+      glm::normalize(glm::vec3(camera->Front.x, 0.0f, camera->Front.z));
+  glm::vec right_dir =
+      glm::normalize(glm::cross(dir, glm::vec3(0.0f, 1.0f, 0.0f)));
 
+  glm::vec3 move_dir(0.0f);
   if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-    player->moveToward(glm::vec3(0.0f, 0.0f, -1.0f), deltaTime);
+    move_dir += dir;
   if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-    player->moveToward(glm::vec3(0.0f, 0.0f, 1.0f), deltaTime);
+    move_dir -= dir;
   if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-    player->moveToward(glm::vec3(-1.0f, 0.0f, 0.0f), deltaTime);
+    move_dir -= right_dir;
   if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-    player->moveToward(glm::vec3(1.0f, 0.0f, 0.0f), deltaTime);
+    move_dir += right_dir;
 
+  // WASD pressed
+  if (glm::length(move_dir) > 0.0f) {
+    isRunning = true;
+    move_dir = glm::normalize(move_dir);
+    player->moveToward(move_dir, deltaTime, isRoll ? 3.0f : MOVEMENT_SPEED);
+    player->m_targetModelAngle = glm::atan(move_dir.x, move_dir.z);
+    player->facingDirection = glm::vec3(move_dir.x, 0.0f, move_dir.z);
+  } else if (isRoll) {
+    isRunning = true;
+    player->moveToward(player->facingDirection, deltaTime,
+                       isRoll ? 3.0f : MOVEMENT_SPEED);
+  } else {
+    isRunning = false;
+  }
   camera->isTrackPlayer =
       (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS) || isCameraLock;
 
@@ -452,51 +672,14 @@ void key_click_callback(GLFWwindow *window, int key, int scancode, int action,
   if (key == GLFW_KEY_Y && action == GLFW_PRESS) {
     isCameraLock = !isCameraLock;
   }
-};
 
-// utility function for loading a 2D texture from file
-// ---------------------------------------------------
-unsigned int loadTexture(char const *path) {
-  unsigned int textureID;
-  glGenTextures(1, &textureID);
-
-  int width, height, nrComponents;
-  unsigned char *data = stbi_load(path, &width, &height, &nrComponents, 0);
-  if (data) {
-    GLenum format;
-    if (nrComponents == 1)
-      format = GL_RED;
-    else if (nrComponents == 3)
-      format = GL_RGB;
-    else if (nrComponents == 4)
-      format = GL_RGBA;
-
-    glBindTexture(GL_TEXTURE_2D, textureID);
-    glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format,
-                 GL_UNSIGNED_BYTE, data);
-    glGenerateMipmap(GL_TEXTURE_2D);
-
-    glTexParameteri(
-        GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,
-        format == GL_RGBA
-            ? GL_CLAMP_TO_EDGE
-            : GL_REPEAT); // for this tutorial: use GL_CLAMP_TO_EDGE to
-                          // prevent semi-transparent borders. Due to
-                          // interpolation it takes texels from next repeat
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,
-                    format == GL_RGBA ? GL_CLAMP_TO_EDGE : GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
-                    GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-    stbi_image_free(data);
-  } else {
-    std::cout << "Texture failed to load at path: " << path << std::endl;
-    stbi_image_free(data);
+  // can only roll while running
+  if (key == GLFW_KEY_C && action == GLFW_PRESS && !isRoll && isRunning) {
+    isRoll = true;
+  } else if (key == GLFW_KEY_F && action == GLFW_PRESS && !isRunning) {
+    isPunch = true;
   }
-
-  return textureID;
-}
+};
 
 void pickingPhase(PickingTexture pickingTexture, Shader shader,
                   PlayerLockCamera *camera, Model *terrain) {

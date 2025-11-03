@@ -18,6 +18,7 @@ const float SPEED = 2.5f;
 const float SENSITIVITY = 0.1f;
 const float ZOOM = 45.0f;
 const float CAMERA_DISTANCE = 12.0f;
+const glm::vec3 CAMERA_OFFSET = {0.0f, 2.5f, 0.0f};
 
 class PlayerLockCamera {
 public:
@@ -55,9 +56,11 @@ public:
 
   // returns the view matrix calculated using Euler Angles and the LookAt Matrix
   glm::mat4 GetViewMatrix() {
-    return glm::lookAt(Position,
-                       isTrackPlayer ? player.m_position : playerLastPosition,
-                       WorldUp);
+    return glm::lookAt(
+        Position + CAMERA_OFFSET,
+        (isTrackPlayer ? player.m_position : playerLastPosition) +
+            CAMERA_OFFSET,
+        WorldUp);
   }
 
   // processes input received from any keyboard-like input system. Accepts input
@@ -111,11 +114,14 @@ public:
   void updateCameraPosition() {
     glm::vec3 cameraPosition;
     cameraPosition.x =
-        m_cameraDistance * cos(glm::radians(Yaw)) * cos(glm::radians(Pitch));
-    cameraPosition.y = m_cameraDistance * sin(glm::radians(Pitch));
+        (m_cameraDistance)*cos(glm::radians(Yaw)) * cos(glm::radians(Pitch));
+    cameraPosition.y = (m_cameraDistance)*sin(glm::radians(Pitch));
     cameraPosition.z =
-        m_cameraDistance * sin(glm::radians(Yaw)) * cos(glm::radians(Pitch));
+        (m_cameraDistance)*sin(glm::radians(Yaw)) * cos(glm::radians(Pitch));
+
     Position = player.m_position + cameraPosition;
+    Front =
+        glm::normalize(glm::vec3(-cameraPosition.x, 0.0f, -cameraPosition.z));
     playerLastPosition =
         player.m_position; // keep track of last position to handle free camera
   }

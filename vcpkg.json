@@ -1,3 +1,14 @@
 {
-  "dependencies": ["glm", "glfw3", "stb", "assimp", "glad" , "soil2"]
+  "dependencies": [
+    "glm",
+    "glfw3",
+    "stb",
+    "assimp",
+    "glad",
+    "soil2",
+    {
+      "name": "imgui",
+      "features": ["glfw-binding", "opengl3-binding"]
+    }
+  ]
 }
